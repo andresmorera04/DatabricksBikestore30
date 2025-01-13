@@ -8,7 +8,7 @@ from datetime import *
 conexionConfiguracion = dbutils.secrets.get(scope="amsedatabricks30", key="secrazuresqljdbcintegrator")
 
 dfParametros = spark.read.format("jdbc").options(
-    url = conexionConfiguracion, dbtable = "dbo.Parametros", driver = "com.microsoft.sqlserver.jdbc.SQLServerDriver").load()
+    url = conexionConfiguracion, dbtable = "dbo.Parametros", driver = "com.microsoft.sqlserver.jdbc.SQLServerDriver", connectTimeout="60").load()
 
 fechaProceso = dfParametros.filter("Clave == 'FechaProceso'").first().Valor
 diasCargar = dfParametros.filter("Clave == 'DiasCargarBorrar'").first().Valor
@@ -65,173 +65,175 @@ idMaximo = spark.sql("SELECT CASE WHEN MAX(DimClienteId) IS NULL THEN 0 ELSE MAX
 
 # Obtener los Existentes con cambios 
 
-dfDatosNuevosExistentes = spark.sql("""
+dfDatosNuevosExistentes = spark.sql(f"""
                                     SELECT 
-                                        dim.DimClienteId 
-                                        ,dim.LlaveNegocioIdCliente AS LlaveNegocioIdCliente 
-                                        ,CASE WHEN plata.nombre IS NULL THEN dim.nombre ELSE plata.nombre END AS nombre
-                                        ,CASE WHEN plata.apellido IS NULL THEN dim.apellido ELSE plata.apellido END AS apellido
-                                        ,CASE WHEN plata.CodigoPais IS NULL THEN dim.CodigoPaisTelefono ELSE plata.CodigoPais END AS CodigoPaisTelefono
-                                        ,CASE WHEN plata.CalleUbicacion IS NULL THEN dim.CalleUbicacion ELSE plata.CalleUbicacion END AS CalleUbicacion
-                                        ,CASE WHEN plata.CiudadUbicacion IS NULL THEN dim.CiudadUbicacion ELSE plata.CiudadUbicacion END AS CiudadUbicacion
-                                        ,CASE WHEN plata.CodigoEstadoUbicacion IS NULL THEN dim.CodigoEstadoUbicacion ELSE plata.CodigoEstadoUbicacion END AS CodigoEstadoUbicacion 
-                                        ,CASE WHEN plata.CodigoPostalUbicacion IS NULL THEN dim.CodigoPostalUbicacion ELSE plata.CodigoPostalUbicacion END AS CodigoPostalUbicacion 
-                                        ,current_timestamp() AS fecha_registro 
-                                        FROM 
+                                    dim.DimClienteId 
+                                    ,dim.LlaveNegocioIdCliente AS LlaveNegocioIdCliente 
+                                    ,CASE WHEN plata.nombre IS NULL THEN dim.nombre ELSE plata.nombre END AS Nombre
+                                    ,CASE WHEN plata.apellido IS NULL THEN dim.apellido ELSE plata.apellido END AS Apellido
+                                    ,CASE WHEN plata.CalleUbicacion IS NULL THEN dim.CalleUbicacion ELSE plata.CalleUbicacion END AS CalleUbicacion
+                                    ,CASE WHEN plata.CiudadUbicacion IS NULL THEN dim.CiudadUbicacion ELSE plata.CiudadUbicacion END AS CiudadUbicacion
+                                    ,CASE WHEN plata.CodigoEstadoUbicacion IS NULL THEN dim.CodigoEstadoUbicacion ELSE plata.CodigoEstadoUbicacion END AS CodigoEstadoUbicacion 
+                                    ,CASE WHEN plata.CodigoPostalUbicacion IS NULL THEN dim.CodigoPostalUbicacion ELSE plata.CodigoPostalUbicacion END AS CodigoPostalUbicacion 
+                                    ,CASE WHEN plata.CodigoPais IS NULL THEN dim.CodigoPaisTelefono ELSE plata.CodigoPais END AS CodigoPaisTelefono
+                                    ,current_timestamp() AS FechaRegistro 
+                                    FROM 
+                                    (
+                                    SELECT 
+                                        A.Bk_IdCliente
+                                        ,B.nombre
+                                        ,B.apellido
+                                        ,D.CodigoPais
+                                        ,B.CalleUbicacion
+                                        ,B.CiudadUbicacion
+                                        ,B.CodigoEstadoUbicacion
+                                        ,B.CodigoPostalUbicacion
+                                    FROM 
+                                        {catalogoDataVault}.{esquemaDataVaultReg}.Hub_Clientes AS A 
+                                        INNER JOIN 
                                         (
                                         SELECT 
-                                            A.Bk_IdCliente
-                                            ,B.nombre
-                                            ,B.apellido
-                                            ,D.CodigoPais
-                                            ,B.CalleUbicacion
-                                            ,B.CiudadUbicacion
-                                            ,B.CodigoEstadoUbicacion
-                                            ,B.CodigoPostalUbicacion
+                                            B2.hk_clientes
+                                            ,B2.nombre 
+                                            ,B2.apellido
+                                            ,B2.CalleUbicacion
+                                            ,B2.CiudadUbicacion
+                                            ,B2.CodigoEstadoUbicacion
+                                            ,B2.CodigoPostalUbicacion
                                         FROM 
-                                            {catalogoDataVault}.{esquemaDataVaultReg}.Hub_Clientes AS A 
-                                            INNER JOIN 
                                             (
                                             SELECT 
-                                                B2.hk_clientes
-                                                ,B2.nombre 
-                                                ,B2.apellido
-                                                ,B2.CalleUbicacion
-                                                ,B2.CiudadUbicacion
-                                                ,B2.CodigoEstadoUbicacion
-                                                ,B2.CodigoPostalUbicacion
-                                            FROM 
-                                                (
-                                                SELECT 
-                                                    hk_clientes
-                                                    ,nombre 
-                                                    ,apellido
-                                                    ,CalleUbicacion
-                                                    ,CiudadUbicacion
-                                                    ,CodigoEstadoUbicacion
-                                                    ,CodigoPostalUbicacion
-                                                    ,ROW_NUMBER()OVER(PARTITION BY hk_clientes ORDER BY FechaRegistro DESC) AS desduplicador
-                                                FROM 
-                                                    {catalogoDataVault}.{esquemaDataVaultReg}.Sat_Clientes_General 
-                                                ) AS B2
-                                            WHERE 
-                                                B2.desduplicador = 1
-                                            ) AS B 
-                                            ON A.hk_clientes = B.hk_clientes
-                                            INNER JOIN 
-                                            (
-                                            SELECT 
-                                                D2.hk_clientes
-                                                ,D2.CodigoPais
-                                            FROM 
-                                                (
-                                                SELECT 
                                                 hk_clientes
-                                                ,CASE 
-                                                    WHEN CodigoPais = '' THEN '(N/D)'
-                                                    ELSE CodigoPais
-                                                END CodigoPais
+                                                ,nombre 
+                                                ,apellido
+                                                ,CalleUbicacion
+                                                ,CiudadUbicacion
+                                                ,CodigoEstadoUbicacion
+                                                ,CodigoPostalUbicacion
                                                 ,ROW_NUMBER()OVER(PARTITION BY hk_clientes ORDER BY FechaRegistro DESC) AS desduplicador
-                                                FROM 
-                                                {catalogoDataVault}.{esquemaDataVaultReg}.Sat_Clientes_Telefonos 
-                                                ) AS D2 
-                                            WHERE 
-                                                D2.desduplicador = 1
-                                            ) AS D 
-                                            ON A.hk_clientes = D.hk_clientes
-                                        ) AS plata 
-                                        INNER JOIN {catalogoDwh}.{esquemaDwhReg}.Dim_Cliente AS dim 
-                                            ON plata.Bk_IdCliente = dim.LlaveNegocioIdCliente
+                                            FROM 
+                                                {catalogoDataVault}.{esquemaDataVaultReg}.Sat_Clientes_General 
+                                            ) AS B2
                                         WHERE 
-                                        (dim.nombre != plata.nombre)
-                                        OR (dim.apellido != plata.apellido)
-                                        OR (dim.CodigoPaisTelefono != plata.CodigoPais)
-                                        OR (dim.CalleUbicacion != plata.CalleUbicacion)
-                                        OR (dim.CiudadUbicacion != plata.CiudadUbicacion)
-                                        OR (dim.CodigoEstadoUbicacion != plata.CodigoEstadoUbicacion)
-                                        OR (dim.CodigoPostalUbicacion != plata.CodigoPostalUbicacion)
+                                            B2.desduplicador = 1
+                                        ) AS B 
+                                        ON A.hk_clientes = B.hk_clientes
+                                        INNER JOIN 
+                                        (
+                                        SELECT 
+                                            D2.hk_clientes
+                                            ,D2.CodigoPais
+                                        FROM 
+                                            (
+                                            SELECT 
+                                            hk_clientes
+                                            ,CASE 
+                                                WHEN CodigoPais = '' THEN '(N/D)'
+                                                ELSE CodigoPais
+                                            END CodigoPais
+                                            ,ROW_NUMBER()OVER(PARTITION BY hk_clientes ORDER BY FechaRegistro DESC) AS desduplicador
+                                            FROM 
+                                            {catalogoDataVault}.{esquemaDataVaultReg}.Sat_Clientes_Telefonos 
+                                            ) AS D2 
+                                        WHERE 
+                                            D2.desduplicador = 1
+                                        ) AS D 
+                                        ON A.hk_clientes = D.hk_clientes
+                                    ) AS plata 
+                                    INNER JOIN {catalogoDwh}.{esquemaDwhReg}.Dim_Cliente AS dim 
+                                        ON plata.Bk_IdCliente = dim.LlaveNegocioIdCliente
+                                    WHERE 
+                                    (dim.nombre != plata.nombre)
+                                    OR (dim.apellido != plata.apellido)
+                                    OR (dim.CodigoPaisTelefono != plata.CodigoPais)
+                                    OR (dim.CalleUbicacion != plata.CalleUbicacion)
+                                    OR (dim.CiudadUbicacion != plata.CiudadUbicacion)
+                                    OR (dim.CodigoEstadoUbicacion != plata.CodigoEstadoUbicacion)
+                                    OR (dim.CodigoPostalUbicacion != plata.CodigoPostalUbicacion)
+                                    ;
                                     """)
 
 # Obtener los nuevos 
 dfTempNuevos = spark.sql(f"""
-                         SELECT 
-                            (ROW_NUMBER()OVER(ORDER BY plata.Bk_IdCliente ASC) + {str(idMaximo)} ) AS DimClienteId 
-                            ,plata.Bk_IdCliente AS LlaveNegocioIdCliente 
-                            ,plata.nombre AS nombre
-                            ,plata.apellido AS apellido
-                            ,plata.CodigoPais AS CodigoPaisTelefono
-                            ,plata.CalleUbicacion AS CalleUbicacion
-                            ,plata.CiudadUbicacion AS CiudadUbicacion
-                            ,plata.CodigoEstadoUbicacion AS CodigoEstadoUbicacion 
-                            ,plata.CodigoPostalUbicacion AS CodigoPostalUbicacion 
-                            ,current_timestamp() AS FechaRegistro 
-                            FROM 
+                        SELECT 
+                        (ROW_NUMBER()OVER(ORDER BY plata.Bk_IdCliente ASC) + {str(idMaximo)} ) AS DimClienteId 
+                        ,plata.Bk_IdCliente AS LlaveNegocioIdCliente 
+                        ,plata.nombre AS Nombre
+                        ,plata.apellido AS Apellido
+                        ,plata.CalleUbicacion AS CalleUbicacion
+                        ,plata.CiudadUbicacion AS CiudadUbicacion
+                        ,plata.CodigoEstadoUbicacion AS CodigoEstadoUbicacion 
+                        ,plata.CodigoPostalUbicacion AS CodigoPostalUbicacion 
+                        ,plata.CodigoPais AS CodigoPaisTelefono
+                        ,current_timestamp() AS FechaRegistro 
+                        FROM 
+                        (
+                        SELECT 
+                            A.Bk_IdCliente
+                            ,B.nombre
+                            ,B.apellido
+                            ,D.CodigoPais
+                            ,B.CalleUbicacion
+                            ,B.CiudadUbicacion
+                            ,B.CodigoEstadoUbicacion
+                            ,B.CodigoPostalUbicacion
+                        FROM 
+                            {catalogoDataVault}.{esquemaDataVaultReg}.Hub_Clientes AS A 
+                            INNER JOIN 
                             (
                             SELECT 
-                                A.Bk_IdCliente
-                                ,B.nombre
-                                ,B.apellido
-                                ,D.CodigoPais
-                                ,B.CalleUbicacion
-                                ,B.CiudadUbicacion
-                                ,B.CodigoEstadoUbicacion
-                                ,B.CodigoPostalUbicacion
+                                B2.hk_clientes
+                                ,B2.nombre 
+                                ,B2.apellido
+                                ,B2.CalleUbicacion
+                                ,B2.CiudadUbicacion
+                                ,B2.CodigoEstadoUbicacion
+                                ,B2.CodigoPostalUbicacion
                             FROM 
-                                {catalogoDataVault}.{esquemaDataVaultReg}.Hub_Clientes AS A 
-                                INNER JOIN 
                                 (
                                 SELECT 
-                                    B2.hk_clientes
-                                    ,B2.nombre 
-                                    ,B2.apellido
-                                    ,B2.CalleUbicacion
-                                    ,B2.CiudadUbicacion
-                                    ,B2.CodigoEstadoUbicacion
-                                    ,B2.CodigoPostalUbicacion
-                                FROM 
-                                    (
-                                    SELECT 
-                                        hk_clientes
-                                        ,nombre 
-                                        ,apellido
-                                        ,CalleUbicacion
-                                        ,CiudadUbicacion
-                                        ,CodigoEstadoUbicacion
-                                        ,CodigoPostalUbicacion
-                                        ,ROW_NUMBER()OVER(PARTITION BY hk_clientes ORDER BY FechaRegistro DESC) AS desduplicador
-                                    FROM 
-                                        {catalogoDataVault}.{esquemaDataVaultReg}.Sat_Clientes_General 
-                                    ) AS B2
-                                WHERE 
-                                    B2.desduplicador = 1
-                                ) AS B 
-                                ON A.hk_clientes = B.hk_clientes
-                                INNER JOIN 
-                                (
-                                SELECT 
-                                    D2.hk_clientes
-                                    ,D2.CodigoPais
-                                FROM 
-                                    (
-                                    SELECT 
                                     hk_clientes
-                                    ,CASE 
-                                        WHEN CodigoPais = '' THEN '(N/D)'
-                                        ELSE CodigoPais
-                                    END CodigoPais
+                                    ,nombre 
+                                    ,apellido
+                                    ,CalleUbicacion
+                                    ,CiudadUbicacion
+                                    ,CodigoEstadoUbicacion
+                                    ,CodigoPostalUbicacion
                                     ,ROW_NUMBER()OVER(PARTITION BY hk_clientes ORDER BY FechaRegistro DESC) AS desduplicador
-                                    FROM 
-                                    {catalogoDataVault}.{esquemaDataVaultReg}.Sat_Clientes_Telefonos 
-                                    ) AS D2 
-                                WHERE 
-                                    D2.desduplicador = 1
-                                ) AS D 
-                                ON A.hk_clientes = D.hk_clientes
-                            ) AS plata 
-                            LEFT JOIN {catalogoDwh}.{esquemaDwhReg}.Dim_Cliente AS dim 
-                                ON plata.Bk_IdCliente = dim.LlaveNegocioIdCliente
+                                FROM 
+                                    {catalogoDataVault}.{esquemaDataVaultReg}.Sat_Clientes_General 
+                                ) AS B2
                             WHERE 
-                            dim.LlaveNegocioIdCliente IS NULL
+                                B2.desduplicador = 1
+                            ) AS B 
+                            ON A.hk_clientes = B.hk_clientes
+                            INNER JOIN 
+                            (
+                            SELECT 
+                                D2.hk_clientes
+                                ,D2.CodigoPais
+                            FROM 
+                                (
+                                SELECT 
+                                hk_clientes
+                                ,CASE 
+                                    WHEN CodigoPais = '' THEN '(N/D)'
+                                    ELSE CodigoPais
+                                END CodigoPais
+                                ,ROW_NUMBER()OVER(PARTITION BY hk_clientes ORDER BY FechaRegistro DESC) AS desduplicador
+                                FROM 
+                                {catalogoDataVault}.{esquemaDataVaultReg}.Sat_Clientes_Telefonos 
+                                ) AS D2 
+                            WHERE 
+                                D2.desduplicador = 1
+                            ) AS D 
+                            ON A.hk_clientes = D.hk_clientes
+                        ) AS plata 
+                        LEFT JOIN {catalogoDwh}.{esquemaDwhReg}.Dim_Cliente AS dim 
+                            ON plata.Bk_IdCliente = dim.LlaveNegocioIdCliente
+                        WHERE 
+                        dim.LlaveNegocioIdCliente IS NULL
+                        ;
                          """)
 
 dfDatosNuevosExistentes = dfDatosNuevosExistentes.unionAll(dfTempNuevos)
@@ -239,7 +241,7 @@ dfDatosNuevosExistentes = dfDatosNuevosExistentes.unionAll(dfTempNuevos)
 # Escribimos tanto los datos nuevos como los existentes con cambios usando pyspark con la función merge que es recomendada para estos casos
 
 if dfDatosNuevosExistentes.isEmpty() == False : 
-    dfDimCliente = DeltaTable.forName(spark, "{catalogoDwh}.{esquemaDwhReg}.Dim_Cliente")
+    dfDimCliente = DeltaTable.forName(spark, f"{catalogoDwh}.{esquemaDwhReg}.Dim_Cliente")
     dfDimCliente.alias("dim").merge(
         dfDatosNuevosExistentes.alias("plata"),
         "dim.LlaveNegocioIdCliente = plata.LlaveNegocioIdCliente"
@@ -247,99 +249,3 @@ if dfDatosNuevosExistentes.isEmpty() == False :
     ).whenMatchedUpdateAll().whenNotMatchedInsertAll().execute()
 
 
-
-# COMMAND ----------
-
-# MAGIC %sql
-# MAGIC DESCRIBE TABLE Dim_Cliente
-
-# COMMAND ----------
-
-dfDatosNuevosExistentes = spark.sql(f"""
-                                    SELECT 
-                                        dim.DimClienteId 
-                                        ,dim.LlaveNegocioIdCliente AS LlaveNegocioIdCliente 
-                                        ,CASE WHEN plata.nombre IS NULL THEN dim.nombre ELSE plata.nombre END AS nombre
-                                        ,CASE WHEN plata.apellido IS NULL THEN dim.apellido ELSE plata.apellido END AS apellido
-                                        ,CASE WHEN plata.CodigoPais IS NULL THEN dim.CodigoPaisTelefono ELSE plata.CodigoPais END AS CodigoPaisTelefono
-                                        ,CASE WHEN plata.CalleUbicacion IS NULL THEN dim.CalleUbicacion ELSE plata.CalleUbicacion END AS CalleUbicacion
-                                        ,CASE WHEN plata.CiudadUbicacion IS NULL THEN dim.CiudadUbicacion ELSE plata.CiudadUbicacion END AS CiudadUbicacion
-                                        ,CASE WHEN plata.CodigoEstadoUbicacion IS NULL THEN dim.CodigoEstadoUbicacion ELSE plata.CodigoEstadoUbicacion END AS CodigoEstadoUbicacion 
-                                        ,CASE WHEN plata.CodigoPostalUbicacion IS NULL THEN dim.CodigoPostalUbicacion ELSE plata.CodigoPostalUbicacion END AS CodigoPostalUbicacion 
-                                        ,current_timestamp() AS FechaRegistro 
-                                        FROM 
-                                        (
-                                        SELECT 
-                                            A.Bk_IdCliente
-                                            ,B.nombre
-                                            ,B.apellido
-                                            ,D.CodigoPais
-                                            ,B.CalleUbicacion
-                                            ,B.CiudadUbicacion
-                                            ,B.CodigoEstadoUbicacion
-                                            ,B.CodigoPostalUbicacion
-                                        FROM 
-                                            {catalogoDataVault}.{esquemaDataVaultReg}.Hub_Clientes AS A 
-                                            INNER JOIN 
-                                            (
-                                            SELECT 
-                                                B2.hk_clientes
-                                                ,B2.nombre 
-                                                ,B2.apellido
-                                                ,B2.CalleUbicacion
-                                                ,B2.CiudadUbicacion
-                                                ,B2.CodigoEstadoUbicacion
-                                                ,B2.CodigoPostalUbicacion
-                                            FROM 
-                                                (
-                                                SELECT 
-                                                    hk_clientes
-                                                    ,nombre 
-                                                    ,apellido
-                                                    ,CalleUbicacion
-                                                    ,CiudadUbicacion
-                                                    ,CodigoEstadoUbicacion
-                                                    ,CodigoPostalUbicacion
-                                                    ,ROW_NUMBER()OVER(PARTITION BY hk_clientes ORDER BY FechaRegistro DESC) AS desduplicador
-                                                FROM 
-                                                    {catalogoDataVault}.{esquemaDataVaultReg}.Sat_Clientes_General 
-                                                ) AS B2
-                                            WHERE 
-                                                B2.desduplicador = 1
-                                            ) AS B 
-                                            ON A.hk_clientes = B.hk_clientes
-                                            INNER JOIN 
-                                            (
-                                            SELECT 
-                                                D2.hk_clientes
-                                                ,D2.CodigoPais
-                                            FROM 
-                                                (
-                                                SELECT 
-                                                hk_clientes
-                                                ,CASE 
-                                                    WHEN CodigoPais = '' THEN '(N/D)'
-                                                    ELSE CodigoPais
-                                                END CodigoPais
-                                                ,ROW_NUMBER()OVER(PARTITION BY hk_clientes ORDER BY FechaRegistro DESC) AS desduplicador
-                                                FROM 
-                                                {catalogoDataVault}.{esquemaDataVaultReg}.Sat_Clientes_Telefonos 
-                                                ) AS D2 
-                                            WHERE 
-                                                D2.desduplicador = 1
-                                            ) AS D 
-                                            ON A.hk_clientes = D.hk_clientes
-                                        ) AS plata 
-                                        INNER JOIN {catalogoDwh}.{esquemaDwhReg}.Dim_Cliente AS dim 
-                                            ON plata.Bk_IdCliente = dim.LlaveNegocioIdCliente
-                                        WHERE 
-                                        (dim.nombre != plata.nombre)
-                                        OR (dim.apellido != plata.apellido)
-                                        OR (dim.CodigoPaisTelefono != plata.CodigoPais)
-                                        OR (dim.CalleUbicacion != plata.CalleUbicacion)
-                                        OR (dim.CiudadUbicacion != plata.CiudadUbicacion)
-                                        OR (dim.CodigoEstadoUbicacion != plata.CodigoEstadoUbicacion)
-                                        OR (dim.CodigoPostalUbicacion != plata.CodigoPostalUbicacion)
-                                    """)
-
-dfDatosNuevosExistentes.display()
