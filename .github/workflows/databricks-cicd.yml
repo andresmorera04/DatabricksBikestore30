@@ -1,11 +1,11 @@
-name: Databricks CI/CD Deployment BikeStores
+name: Databricks CI/CD Deployment BikeStores 
 
 on:
   pull_request:
-    types: [closed] # Se ejecuta cuando un pull request se cierra
+    types: [closed]
   push:
     branches:
-      - main # También se ejecuta en cambios directos a main
+      - main
 
 jobs:
   deploy-to-production:
@@ -17,23 +17,28 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v3
 
-    # Paso 2: Instalar y configurar el Databricks CLI
-    - name: Install and configure Databricks CLI
+    # Paso 2: Instalar Databricks CLI
+    - name: Install Databricks CLI
       run: |
-        pip install databricks-cli
-        databricks configure --host ${{ secrets.DATABRICKS_PRO_HOST }} --token ${{ secrets.DATABRICKS_PRO_TOKEN }}
+        pip install --upgrade databricks-cli
 
-    # Paso 3: Limpiar el Workspace de Producción (opcional)
+    # Paso 3: Configurar Databricks CLI usando variables de entorno
+    - name: Set Databricks CLI environment variables
+      run: |
+        export DATABRICKS_HOST=${{ secrets.DATABRICKS_PROD_HOST }}
+        export DATABRICKS_TOKEN=${{ secrets.DATABRICKS_PROD_TOKEN }}
+
+    # Paso 4: Limpiar el Workspace de Producción (opcional)
     - name: Clean production workspace
       run: |
-        databricks workspace delete --path /Workspace/ProductoDatos/BikeStores --recursive --quiet || true
+        databricks workspace delete --path /Workspace/ProductosDatos/BikeStores --recursive --quiet || true
 
-    # Paso 4: Desplegar notebooks y directorios al Workspace de Producción
+    # Paso 5: Desplegar notebooks y directorios al Workspace de Producción
     - name: Deploy notebooks to production
       run: |
-        databricks workspace import_dir ./ /Workspace/ProductoDatos/BikeStores --overwrite
-        
-    # Paso 5: Listar contenido en Producción
+        databricks workspace import_dir ./ /Workspace/ProductosDatos/BikeStores --overwrite
+
+    # Paso 6: Listar contenido en Producción
     - name: List contents in production workspace
       run: |
-        databricks workspace ls /Workspace/ProductoDatos/BikeStores
+        databricks workspace ls /Workspace/ProductosDatos/BikeStores
