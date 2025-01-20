@@ -1,0 +1,39 @@
+name: Databricks CI/CD Deployment BikeStores
+
+on:
+  pull_request:
+    types: [closed] # Se ejecuta cuando un pull request se cierra
+  push:
+    branches:
+      - main # También se ejecuta en cambios directos a main
+
+jobs:
+  deploy-to-production:
+    if: github.event.pull_request.merged == true || github.event_name == 'push'
+    runs-on: ubuntu-latest
+
+    steps:
+    # Paso 1: Clonar el repositorio
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    # Paso 2: Instalar y configurar el Databricks CLI
+    - name: Install and configure Databricks CLI
+      run: |
+        pip install databricks-cli
+        databricks configure --host ${{ secrets.DATABRICKS_PRO_HOST }} --token ${{ secrets.DATABRICKS_PRO_TOKEN }}
+
+    # Paso 3: Limpiar el Workspace de Producción (opcional)
+    - name: Clean production workspace
+      run: |
+        databricks workspace delete --path /Workspace/ProductoDatos/BikeStores --recursive --quiet || true
+
+    # Paso 4: Desplegar notebooks y directorios al Workspace de Producción
+    - name: Deploy notebooks to production
+      run: |
+        databricks workspace import_dir ./ /Workspace/ProductoDatos/BikeStores --overwrite
+        
+    # Paso 5: Listar contenido en Producción
+    - name: List contents in production workspace
+      run: |
+        databricks workspace ls /Workspace/ProductoDatos/BikeStores
