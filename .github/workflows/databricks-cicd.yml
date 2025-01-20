@@ -25,8 +25,8 @@ jobs:
     # Paso 3: Configurar Databricks CLI usando variables de entorno
     - name: Set Databricks CLI environment variables
       run: |
-        export DATABRICKS_HOST=${{ secrets.DATABRICKS_PROD_HOST }}
-        export DATABRICKS_TOKEN=${{ secrets.DATABRICKS_PROD_TOKEN }}
+        export DATABRICKS_HOST=${{ secrets.DATABRICKS_PRO_HOST }}
+        export DATABRICKS_TOKEN=${{ secrets.DATABRICKS_PRO_TOKEN }}
 
     # Paso 4: Limpiar el Workspace de Producción (opcional)
     - name: Clean production workspace
